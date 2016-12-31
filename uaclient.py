@@ -63,8 +63,22 @@ if __name__ == "__main__":
         sys.exit("Usage: python uaclient.py config method option")
 
     """Contenido que vamos a enviar."""
-    Linea_sip = ' sip:' + USUARIO + ' ' + UASERVER_IP + ' SIP/2.0\r\n'
-    LINEA = METHOD + Linea_sip
+    Linea_sip = METHOD + ' sip:'    
+    if METHOD == 'REGISTER':
+        Linea = Linea_sip + USUARIO + ':' + UASERVER_PUERTO
+        Linea += ' SIP/2.0' + '\r\n' + 'EXPIRES: ' + OPTION + '\r\n'
+    elif METHOD == 'INVITE':
+        Linea = Linea_sip + USUARIO + 'SIP/2.0'
+        Linea += '\r\n' + 'Content-Type: application/sdp' + '\r\n' + 'v=0'
+        Linea += '\r\n' + 'o=' + USUARIO + ' ' + UASERVER_IP + '\r\n'
+        Linea += 's=misesion' + '\r\n' + 't=0'
+        Linea += '\r\n' + 'm=audio ' + RTPAUDIO + ' RTP'
+    elif METHOD == 'BYE':
+        Linea = Linea_sip + OPTION + 'SIP/2.0'
+    else:
+        Linea = Linea_sip + OPTION + 'SIP/2.0'
+   
+        
 
 
     """Creamos el socket, lo configuramos y lo atamos a un servidor/puerto"""
@@ -72,8 +86,8 @@ if __name__ == "__main__":
     my_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     my_socket.connect((UASERVER_IP, int(UASERVER_PUERTO)))
 
-    print("Send: " + LINEA)
-    my_socket.send(bytes(LINEA, 'utf-8') + b'\r\n')
+    print("Send: " + Linea)
+    my_socket.send(bytes(Linea, 'utf-8') + b'\r\n')
     data = my_socket.recv(1024)
 
     print('Recived -- ', data.decode('utf-8'))
@@ -81,8 +95,7 @@ if __name__ == "__main__":
 
     lista = data.decode('utf-8').split('\r\n\r\n')[0:-1]
     if lista == ['SIP/2.0 100 Trying', 'SIP/2.0 180 Ring', 'SIP/2.0 200 OK']:
-        LINEACK = 'ACK' + Linea_sip
-        print ('Enviando: ' + LINEACK)
+        LINEACK = 'ACK' + ' sip:' + OPTION + 'SIP/2.0' + b'\r\n'
         my_socket.send(bytes(LINEACK, 'utf-8') + b'\r\n')
         data = my_socket.recv(1024)
 
