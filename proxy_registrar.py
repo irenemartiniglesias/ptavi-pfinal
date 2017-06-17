@@ -91,14 +91,16 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
     def CheckPassword(self, Path, Password, User_agent, Ip, Puerto):
         Found = 'False'
         fich = open(Path, 'r')
-        lines = fich.readlines()
+        lines = fich.readlines(1)
         for line in range(len(lines)):
             User = lines[line].split(' ')[1]
+            print(User)
             Password = lines[line].split(' ')[3]
+            print(Password)
             Nonce = str(self.NONCE)
-            m = hashlib.md5()
-            m.update(bytes(Password + Nonce, 'utf-8'))
-            RESPONSE = m
+            aleatorio = hashlib.md5()
+            aleatorio.update(bytes(Password + Nonce, 'utf-8'))
+            RESPONSE = aleatorio.hexdigest()
             print('hola pass')
             if User == User_agent:
                 print('hola pass1')
