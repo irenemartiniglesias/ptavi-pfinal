@@ -9,6 +9,7 @@ import random
 import os 
 import json
 import hashlib
+import time
 
 
 class ReadXmlProxy(ContentHandler):
@@ -33,11 +34,31 @@ class ReadXmlProxy(ContentHandler):
         """Devuelve las etiquetas y sus valores en forma de lista"""
         return self.lista
 
-def CrearSocket( IP, PUERTO, LINE):
+def Datos_Log(fichero, evento, ip, port, line):
+    fich = open(fichero, 'a')
+    time_now = time.strftime("%Y%m%d%H%M%S", time.gmtime(time.time()))
+    if evento == 'Error':
+        datos1 = time_now + ' ' + evento + ': No server listening at '
+        datos = datos1 + ip + " Port " + port + '\r\n'
+    elif evento != 'Starting...' and evento != 'Finishing.':
+        puerto = str(port)
+        datos1 = time_now + ' ' + evento + ip + ':' + puerto + ': ' + line
+        datos = datos1 + '\r\n'
+    else:
+        datos = time_now + ' ' + evento + '\r\n'
+    fich.write(datos)
+    fich.close()
+
+def CrearSocket(PATH,IP, PUERTO, LINE):
     my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     my_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     my_socket.connect((IP, int(PUERTO)))
     my_socket.send(LINE)
+    #Mensaje de envio escrito en el log
+    Puerto = str(PUERTO)
+    Envio = 'Send to '
+    Line_decod = Line.decode('utf-8')
+    Datos_Log(PATH_LOG, Event, Ip, Puerto, Line_decod)
 
 def comprobar_registro(dicc_client, Client):
 	if Client not in dicc_client.keys():
@@ -46,6 +67,19 @@ def comprobar_registro(dicc_client, Client):
 	    datos = dicc_client[Client]
 	return datos
 
+def Time_Caduced(dicc_client):
+    # Función para actualizar el diccionario, elimina cientes que tengan el
+    # Expires caducado
+    Lista = []
+    for Client in dicc_client:
+        Expiration = int(dicc_client[Client][3])
+        Time_now = int(time.time())
+        if Time_now >= Expiration:
+            Lista.append(Client)
+
+    # Borramos del diccionario los clientes expirados
+    for Usuario in Lista:
+        del dicc_client[Usuario]	
      
 class EchoProxyHandler(socketserver.DatagramRequestHandler):
 
@@ -54,12 +88,39 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
     # Variable aleatoria NONCE
     NONCE = random.getrandbits(100)
 
+    def CheckPassword(self, Path, Password, User_agent, Ip, Puerto):
+        Found = 'False'
+        fich = open(Path, 'r')
+        lines = fich.readlines()
+        for line in range(len(lines)):
+            User = lines[line].split(' ')[1]
+            Password = lines[line].split(' ')[3]
+            Nonce = str(self.NONCE)
+            m = hashlib.md5()
+            m.update(bytes(Password + Nonce, 'utf-8'))
+            RESPONSE = m
+            print('hola pass')
+            if User == User_agent:
+                print('hola pass1')
+                if RESPONSE == Password:
+                    Found = 'True'
+                    print('hola pass2')
+                else:
+                    message = 'Acceso denegado: password is incorrect\r\n'
+                    message += 'Via: SIP/2.0/UDP '
+                    message += 'branch=z9hG4bKnashds7\r\n\r\n'
+                    self.wfile.write(bytes(message, 'utf-8'))
+                    # Escribimos en el log el mensaje acceso denegado
+                    Event = ' Send to '
+                    Datos_Log(PATH_LOG, Event, Ip, Puerto, message)
+        fich.close()
+        return Found
+
     def handle(self):
 
-        #self.txt_registro_seguro(DATABASE_PATH)
         # Actualizamos el diccionario de clientes por si ha caducado el Espires
         # de algún cliente
-        #Time_Caduced(self.dicc_client)
+        Time_Caduced(self.dicc_client)
 
         while 1:
             # Leyendo línea a línea lo que nos envía el cliente
@@ -75,14 +136,14 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                 print("Recibimos:\r\n" + line_decod)
                 # Escribimos mensages de recepción en el fichero de log
                 Evento = ' Received from '
-                #Datos_Log(PATH_LOG, Evento, Ip, Puerto, line_decod)
+                Datos_Log(PATH_LOG, Evento, Ip, Puerto, line_decod)
             if len(line_decod) >= 2:
                 if METHOD == 'REGISTER':
-                    list = line_decod.split('\r\n')
-                    Client = list[0].split(':')[1]
-                    list0 = list[0].split(':')[2]
+                    lista = line_decod.split('\r\n')
+                    Client = lista[0].split(':')[1]
+                    list0 = lista[0].split(':')[2]
                     Port_UA = list0.split(' ')[0]
-                    if len(list) == 4:
+                    if len(lista) == 4:
                         mssg = 'SIP/2.0 401 Unauthorized\r\n'
                         mssg += 'Via: SIP/2.0/UDP branch=z9hG4bKnashds7\r\n'
                         mssg += 'WWW Authenticate: Digest nonce="'
@@ -92,13 +153,19 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                         self.wfile.write(bytes(mssg, 'utf-8'))
                         # Escribimos los mensages de envio en el log
                         Event = ' Send to '
-                        #Datos_Log(PATH_LOG, Event, Ip, Port_UA, mssg)
+                        Datos_Log(PATH_LOG, Event, Ip, Port_UA, mssg)
+                        print('hola1')
                     elif len(lista) == 5:
-                        Psswd_Salto_Linea = lista[2].split('response="')[1]
-                        Psswd = Psswd_Salto_Linea.split('"')[0]
-                        Found = self.CheckPsswd(DATA_PASSWDPATH, Psswd, Client,
+                        print('hola2')
+                        Password_Salto_Linea = lista[2].split('response="')[1]
+                        print('hola3')
+                        Password = Password_Salto_Linea.split('"')[0]
+                        print('hola4')
+                        Found = self.CheckPassword(DATA_PASSWORD, Password, Client,
                                                 Ip, Puerto)
+                        print('hola5')                        
                         if Found == 'True':
+                            print('hola6')
                             try:
                                 Expires = lista[1].split(' ')[1]
                                 if Expires == '0':
@@ -115,7 +182,10 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                                 messg += 'Via: SIP/2.0/UDP '
                                 messg += 'branch=z9hG4bKnashds7\r\n\r\n'
                                 self.wfile.write(bytes(messg, 'utf-8'))
-
+                                 # Escribimos el mensage de envio en el log
+                                Event = ' Send to '
+                                Datos_Log(PATH_LOG, Event, Ip, Puerto, messg)
+                                self.register2txt(DATABASE_CAMINO, Ip, Client)
                             except:
                                 messg = "Expires no es un entero\r\n"
                                 messg += 'Via: SIP/2.0/UDP '
@@ -139,17 +209,12 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                         mssg += "branch=z9hG4bKnashds7\r\n\r\n"
                         # Ecribimos los datos que se envian en el log
                         Event = ' Send to '
-                        #Datos_Log(PATH_LOG, Event, Ip, Puerto, mssg)
+                        Datos_Log(PATH_LOG, Event, Ip, Puerto, mssg)
                         self.wfile.write(bytes(mssg, 'utf-8'))
                     else:
                         # Datos de la ip y puerto del usuario registrado
                         Ip_Regist = Usuario_Regist[0]
                         Port_Regist = Usuario_Regist[1]
-                        # Miramos que la conexión sea segura y se envían datos
-                        # o se hace sys.exit en función de la conexión
-                        Linea = Añadir_Cabecera_Proxy(line_decod)
-                        self.Conexion_Segura(PATH_LOG, Port_Regist, Ip_Regist,
-                                             Linea)
 
                 elif METHOD == 'ACK':
                     Sip_direccion = line_decod.split(' ')[1]
@@ -165,12 +230,11 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                         Datos_Log(Path, Event, Ip, Puerto, mssg)
                         self.wfile.write(bytes(mssg, 'utf-8'))
                     else:
-                        # Datos de la ip y puerto del usuario registrado
+                        #Datos de la ip y puerto del usuario registrado
                         Ip_Regist = Usuario_Regist[0]
                         Port_Regist = int(Usuario_Regist[1])
 
                         # Abrimos un socket y enviamos
-                        Linea = Añadir_Cabecera_Proxy(line_decod)
                         Open_Socket(PATH_LOG, Ip_Regist, Port_Regist, Linea)
 
                 elif METHOD == 'BYE':
@@ -218,9 +282,21 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
             if not line:
                 break
 
-     
-
-     
+    def register2txt(self, Path, ip, direction):
+        """
+        Función de registro de usuarios en el archivo database.txt
+        """
+        fich = open(Path, "a")
+        for Client in self.dicc_client:
+            Ip = self.dicc_client[Client][0]
+            Port = self.dicc_client[Client][1]
+            Expiration = self.dicc_client[Client][2]
+            Fecha_Registro = self.dicc_client[Client][3]
+            Line = Client + "\t" + Ip + "\t" + str(Port) + "\t"
+            Line += str(Fecha_Registro) + "\t\t" + str(Expiration) + "\r\n"
+            fich.write(Line)
+        fich.close()
+    
 if __name__ == "__main__":
     #Sacamos los datos del XML 
     CONFIG = sys.argv[1]
@@ -233,6 +309,15 @@ if __name__ == "__main__":
     
     PROXY_SERVER = lista[0]['server']['ip']
     PROXY_PUERTO = lista[0]['server']['puerto']
+    DATABASE_CAMINO = lista[1]['database']['path']
+    DATA_PASSWORD = lista[1]['database']['passwdpath']
+    PATH_LOG = lista[2]['log']['path']
+    
+    fich = open(DATABASE_CAMINO, "a")
+    Linea = "Usuario\tIP\tPuerto\t" + "Fecha de Registro\t"
+    Linea += "Tiempo de expiracion\r\n"
+    fich.write(Linea)
+    fich.close()
 	 
     serv = socketserver.UDPServer((PROXY_SERVER, int(PROXY_PUERTO)), EchoProxyHandler)
     print("Listening...")
