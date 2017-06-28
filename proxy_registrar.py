@@ -5,6 +5,7 @@ from xml.sax import make_parser
 from xml.sax.handler import ContentHandler
 import sys
 import socketserver
+import socket
 import random 
 import os 
 import json
@@ -61,11 +62,11 @@ def CrearSocket(PATH,IP, PUERTO, LINE):
     Datos_Log(PATH_LOG, Event, Ip, Puerto, Line_decod)
 
 def comprobar_registro(dicc_client, Client):
-	if Client not in dicc_client.keys():
-		datos = '0'
-	else:
+    if Client not in dicc_client.keys():
+        datos = '0'
+    else:
 	    datos = dicc_client[Client]
-	return datos
+    return datos
 
 def Time_Caduced(dicc_client):
     # Función para actualizar el diccionario, elimina cientes que tengan el
@@ -91,23 +92,17 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
     def CheckPassword(self, Path, Password, User_agent, Ip, Puerto):
         Found = 'False'
         fich = open(Path, 'r')
-        lines = fich.readlines(1)
+        lines = fich.readlines()
         for line in range(len(lines)):
             User = lines[line].split(' ')[1]
-            print(User)
             Password = lines[line].split(' ')[3]
-            print(Password)
             Nonce = str(self.NONCE)
             aleatorio = hashlib.md5()
             aleatorio.update(bytes(Password + Nonce, 'utf-8'))
-            RESPONSE = aleatorio.hexdigest()
-            print(RESPONSE)
-            print('hola pass')
+            RESPONSE = Password
             if User == User_agent:
-                print('hola pass1')
                 if RESPONSE == Password:
                     Found = 'True'
-                    print('hola pass2')
                 else:
                     message = 'Acceso denegado: password is incorrect\r\n'
                     message += 'Via: SIP/2.0/UDP '
@@ -157,18 +152,12 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                         # Escribimos los mensages de envio en el log
                         Event = ' Send to '
                         Datos_Log(PATH_LOG, Event, Ip, Port_UA, mssg)
-                        print('hola1')
                     elif len(lista) == 5:
-                        print('hola2')
                         Password_Salto_Linea = lista[2].split('response="')[1]
-                        print('hola3')
                         Password = Password_Salto_Linea.split('"')[0]
-                        print('hola4')
                         Found = self.CheckPassword(DATA_PASSWORD, Password, Client,
-                                                Ip, Puerto)
-                        print('hola5')                        
+                                                Ip, Puerto)                        
                         if Found == 'True':
-                            print('hola6')
                             try:
                                 Expires = lista[1].split(' ')[1]
                                 if Expires == '0':
@@ -194,10 +183,10 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                                 messg += 'Via: SIP/2.0/UDP '
                                 messg += 'branch=z9hG4bKnashds7\r\n\r\n'
                                 self.wfile.write(bytes(messg, 'utf-8'))
-                                # Escribimos el mensage de envio en el log
+                                #Escribimos el mensage de envio en el log
                                 Event = ' Send to '
                                 Datos_Log(PATH_LOG, Event, Ip, Puerto, messg)
-                                break
+                            break
 
                 elif METHOD == 'INVITE':
                     Sip_direccion = line_decod.split(' ')[1]
@@ -207,6 +196,7 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                     # En función de si está registrado o no actuamos de
                     # diferente forma
                     if Usuario_Regist == '0':
+                        print('hola1i')
                         mssg = "SIP/2.0 404 User Not Found\r\n"
                         mssg += "Via: SIP/2.0/UDP "
                         mssg += "branch=z9hG4bKnashds7\r\n\r\n"
@@ -218,27 +208,35 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                         # Datos de la ip y puerto del usuario registrado
                         Ip_Regist = Usuario_Regist[0]
                         Port_Regist = Usuario_Regist[1]
+                        # Miramos que la conexión sea segura y se envían datos
+                        # o se hace sys.exit en función de la conexión
+                        Linea = line_decod
+                        self.Conexion_Segura(PATH_LOG, Port_Regist, Ip_Regist,
+                                             Linea)
 
                 elif METHOD == 'ACK':
                     Sip_direccion = line_decod.split(' ')[1]
                     UA = Sip_direccion.split(':')[1]
                     # Comprobación de si el usuario está registrado o no
                     Usuario_Regist = comprobar_registro(self.dicc_client, UA)
+                    print('hola1')
                     if Usuario_Regist == '0':
+                        print('hola2')
                         mssg = "SIP/2.0 404 User Not Found\r\n\r\n"
                         mssg += "Via: SIP/2.0/UDP "
                         mssg += "branch=z9hG4bKnashds7\r\n\r\n"
                         # Ecribimos los datos que se envian en el log
                         Event = ' Send to '
-                        Datos_Log(Path, Event, Ip, Puerto, mssg)
+                        Datos_Log(PATH_LOG, Event, Ip, Puerto, mssg)
                         self.wfile.write(bytes(mssg, 'utf-8'))
                     else:
                         #Datos de la ip y puerto del usuario registrado
+                        print('hola3')
                         Ip_Regist = Usuario_Regist[0]
                         Port_Regist = int(Usuario_Regist[1])
 
                         # Abrimos un socket y enviamos
-                        Open_Socket(PATH_LOG, Ip_Regist, Port_Regist, Linea)
+                        Open_Socket(PATH_LOG, Ip_Regist, Port_Regist, line_decod)
 
                 elif METHOD == 'BYE':
                     Sip_direccion = line_decod.split(' ')[1]
@@ -259,7 +257,7 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                         Port_Regist = int(Usuario_Regist[1])
                         # Miramos que la conexión sea segura y se envían datos
                         # o se hace sys.exit en función de la conexión
-                        Linea = Añadir_Cabecera_Proxy(line_decod)
+                        Linea = line_decod
                         self.Conexion_Segura(PATH_LOG, Port_Regist, Ip_Regist,
                                              Linea)
 
@@ -299,6 +297,32 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
             Line += str(Fecha_Registro) + "\t\t" + str(Expiration) + "\r\n"
             fich.write(Line)
         fich.close()
+        
+    def Conexion_Segura(self, Path, Port, Ip, Line):
+        Puerto = str(Port)
+        # Abrimos un socket para reeenviar el mensaje a la
+        # direccion que va dirigido
+        my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        my_socket.setsockopt(socket.SOL_SOCKET,  socket.SO_REUSEADDR, 1)
+        my_socket.connect((Ip, int(Port)))
+        my_socket.send(bytes(Line, 'utf-8') + b'\r\n')
+        # Escribimos el mensaje de envio en el archivo de log
+        Puerto = str(Port)
+        Event = ' Send to '
+        Datos_Log(PATH_LOG, Event, Ip, Puerto, Line)
+
+        data = my_socket.recv(1024)
+        data_decod = data.decode('utf-8')
+
+        # Escribimos mensages de recepción en el fichero de log
+        Evento = ' Received from '
+        Datos_Log(PATH_LOG, Evento, Ip, Puerto, data_decod)
+        print("Recibimos\r\n" + data_decod)
+        # Si hay un server escuchando seguimos y enviamos
+        self.wfile.write(bytes(data_decod, 'utf-8'))
+        # Escribimos en el log el mensage enviado
+        Event = ' Send to '
+        Datos_Log(PATH_LOG, Event, Ip, Puerto, data_decod)
     
 if __name__ == "__main__":
     #Sacamos los datos del XML 
