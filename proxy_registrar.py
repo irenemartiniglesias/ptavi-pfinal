@@ -101,6 +101,7 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
             aleatorio = hashlib.md5()
             aleatorio.update(bytes(Password + Nonce, 'utf-8'))
             RESPONSE = aleatorio.hexdigest()
+            print(RESPONSE)
             print('hola pass')
             if User == User_agent:
                 print('hola pass1')

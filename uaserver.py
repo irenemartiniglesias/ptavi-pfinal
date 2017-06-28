@@ -5,6 +5,8 @@ from xml.sax import make_parser
 from xml.sax.handler import ContentHandler
 import sys
 import socketserver
+from proxy_registrar import Datos_Log
+import os
 
 class ReadXML(ContentHandler):
     """ Clase para manejar el xml ua1 """
@@ -36,40 +38,58 @@ class EchoHandler(socketserver.DatagramRequestHandler):
         #variable para despues quedarnos con lo que nos interesa de ella
         linea = self.rfile.read()
         linea_decod = linea.decode('utf-8')
-        #coge el método de la posición en la que se encuentra y cada metodo
-        #tiene sus codigos de respuesta
+        #metodos validos
         METHOD = linea_decod.split(' ')[0].upper()
         METHODS = ['INVITE', 'BYE', 'ACK']
+        #Escribimos en el log lo que recibimos
+        Recibido = 'Recived to '
+        Datos_Log(LOG, Recibido, REGPROXY_IP, REGPROXY_PUERTO, linea_decod)
         if len(linea_decod) >= 2:
             if METHOD == 'INVITE':
-                msj = 'SIP/2.0 100 Trying \r\n\r\n'
-                msj += 'SIP/2.0 180 Ring \r\n\r\n'
-                msj += 'SIP/2.0 200 OK \r\n\r\n'
-                msj += 'Content-Type: application/sdp \r\n\r\n'
-                msj += 'v=0 \r\n\r\n'
-                msj += 'o=' + USUARIO + ' ' + UASERVER_IP + '\r\n\r\n'
-                msj += 's=misesion \r\n\r\n'
-                msj += 't=0 \r\n\r\n' + 'm=audio' +' ' + RTPAUDIO + ' RTP'
+                msj = 'Via: SIP/2.0/UDP branch=z9hG4bKnashds7\r\n'
+                msj += 'SIP/2.0 100 Trying \r\n'
+                msj += 'SIP/2.0 180 Ring \r\n'
+                msj += 'SIP/2.0 200 OK \r\n'
+                msj += 'Content-Type: application/sdp \r\n'
+                msj += 'v=0 \r\n'
+                msj += 'o=' + USUARIO + ' ' + UASERVER_IP + '\r\n'
+                msj += 's=misesion \r\n'
+                msj += 't=0 \r\n' + 'm=audio' +' ' + RTPAUDIO + ' RTP'
                 #Enviamos la respuesta al cliente
                 self.wfile.write(bytes(msj,('utf-8')))
                 #Escribimos lo que nos manda el cliente
                 print('EL cliente nos manda: ' + linea_decod)
+                #escribimos lo que se nos manda en el Log
+                Evento = 'Send to '
+                Datos_Log(LOG, Evento, REGPROXY_IP, REGPROXY_PUERTO, msj)
             elif METHOD == 'BYE':
-                msj = 'SIP/2.0 200 OK \r\n\r\n'
+                messj = 'SIP/2.0 200 OK \r\n'
                 self.wfile.write(bytes(msj,('utf-8')))
                 print("El cliente nos manda " + linea_decod)
+                #ecribimos mensaje recibido en el log
+                Evento = 'Send to '
+                Datos_Log(LOG, Evento, REGPROXY_IP, REGPROXY_PUERTO, messj)
             elif METHOD == 'ACK':
                 aEjecutar = './mp32rtp -i ' + UASERVER_IP + ' -p' + RTPAUDIO
                 aEjecutar += '<' + AUDIO
                 os.system(aEjecutar)
                 print("El cliente nos manda " + linea_decod)
+                #ecribimos mensaje recibido en el log
+                Evento = 'Send to '
+                Datos_Log(LOG, Evento, REGPROXY_IP, REGPROXY_PUERTO, aEjecutar)
             elif METHOD not in METHODS:
-                msj = 'SIP/2.0 405 Method Not Allowed \r\n\r\n'
+                mesj = 'SIP/2.0 405 Method Not Allowed \r\n'
                 self.wfile.write(bytes(msj,('utf-8')))
                 print("El cliente nos manda " + linea_decod)
+                #ecribimos mensaje recibido en el log
+                Evento = 'Send to '
+                Datos_Log(LOG, Evento, REGPROXY_IP, REGPROXY_PUERTO, mesj)
         else:
-            self.wfile.write('b"SIP/2.0 400 Bad Request\r\n\r\n')
+            self.wfile.write('b"SIP/2.0 400 Bad Request\r\n')
             print("El cliente nos manda " + linea_decod)
+            #ecribimos mensaje recibido en el log
+            Evento = 'Send to '
+            Datos_Log(LOG, Evento, REGPROXY_IP, REGPROXY_PUERTO, linea_decod)
     
         
         
