@@ -207,11 +207,9 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                         # Datos de la ip y puerto del usuario registrado
                         Ip_Regist = Usuario_Regist[0]
                         Port_Regist = Usuario_Regist[1]
-                        # Miramos que la conexión sea segura y se envían datos
-                        # o se hace sys.exit en función de la conexión
-                        Linea = line_decod
+                        #enviamos datos
                         self.Conexion(PATH_LOG, Port_Regist, Ip_Regist,
-                                             Linea)
+                                             line_decod)
 
                 elif METHOD == 'ACK':
                     Sip_direccion = line_decod.split(' ')[1]
