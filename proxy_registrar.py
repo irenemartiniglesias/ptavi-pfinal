@@ -196,7 +196,6 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                     # En función de si está registrado o no actuamos de
                     # diferente forma
                     if Usuario_Regist == '0':
-                        print('hola1i')
                         mssg = "SIP/2.0 404 User Not Found\r\n"
                         mssg += "Via: SIP/2.0/UDP "
                         mssg += "branch=z9hG4bKnashds7\r\n\r\n"
@@ -211,7 +210,7 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                         # Miramos que la conexión sea segura y se envían datos
                         # o se hace sys.exit en función de la conexión
                         Linea = line_decod
-                        self.Conexion_Segura(PATH_LOG, Port_Regist, Ip_Regist,
+                        self.Conexion(PATH_LOG, Port_Regist, Ip_Regist,
                                              Linea)
 
                 elif METHOD == 'ACK':
@@ -258,7 +257,7 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
                         # Miramos que la conexión sea segura y se envían datos
                         # o se hace sys.exit en función de la conexión
                         Linea = line_decod
-                        self.Conexion_Segura(PATH_LOG, Port_Regist, Ip_Regist,
+                        self.Conexion(PATH_LOG, Port_Regist, Ip_Regist,
                                              Linea)
 
                 elif METHOD not in METHODS:
@@ -298,18 +297,15 @@ class EchoProxyHandler(socketserver.DatagramRequestHandler):
             fich.write(Line)
         fich.close()
         
-    def Conexion_Segura(self, Path, Port, Ip, Line):
-        Puerto = str(Port)
-        # Abrimos un socket para reeenviar el mensaje a la
-        # direccion que va dirigido
+    def Conexion(self, Path, Port, Ip, Line):
+        # Abrimos un socket 
         my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         my_socket.setsockopt(socket.SOL_SOCKET,  socket.SO_REUSEADDR, 1)
         my_socket.connect((Ip, int(Port)))
         my_socket.send(bytes(Line, 'utf-8') + b'\r\n')
         # Escribimos el mensaje de envio en el archivo de log
-        Puerto = str(Port)
         Event = ' Send to '
-        Datos_Log(PATH_LOG, Event, Ip, Puerto, Line)
+        Datos_Log(PATH_LOG, Event, Ip, Port, Line)
 
         data = my_socket.recv(1024)
         data_decod = data.decode('utf-8')
