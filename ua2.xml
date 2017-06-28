@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+   <account username= "pepito@ptavi.com" password="987654" /> 
+   <uaserver ip= "127.0.0.1" puerto= "5060" />
+   <rtpaudio puerto= "34543" />
+   <regproxy ip= "127.0.0.1" puerto= "5556" />
+   <log path= "datos_servidor.txt" />
+   <audio path= "cancion.mp3" />
+</config>
