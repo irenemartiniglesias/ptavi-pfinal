@@ -6,6 +6,7 @@ from xml.sax.handler import ContentHandler
 import sys
 import socket
 import hashlib
+from proxy_registrar import Datos_Log
 
 class ReadXML(ContentHandler):
     """ Clase para manejar el xml ua1 """
@@ -67,10 +68,14 @@ if __name__ == "__main__":
     """Contenido que vamos a enviar."""
     Linea_sip = METHOD + ' sip:'    
     if METHOD == 'REGISTER':
-        Linea = Linea_sip + USUARIO + ':' + REGPROXY_PUERTO
+        # Añadimos al  archivo log cuando comenzamos
+        Event = ' Starting...'
+        Datos_Log(LOG, Event, '', '', '')
+        # Datos de envio
+        Linea = Linea_sip + USUARIO + ':' + UASERVER_PUERTO
         Linea += ' SIP/2.0' + '\r\n' + 'EXPIRES: ' + OPTION + '\r\n'
     elif METHOD == 'INVITE':
-        Linea = Linea_sip + USUARIO + 'SIP/2.0'
+        Linea = Linea_sip + USUARIO + ' SIP/2.0'
         Linea += '\r\n' + 'Content-Type: application/sdp' + '\r\n''\r\n' + 'v=0'
         Linea += '\r\n' + 'o=' + USUARIO + ' ' + UASERVER_IP + '\r\n'
         Linea += 's=misesion' + '\r\n' + 't=0'
@@ -89,38 +94,86 @@ if __name__ == "__main__":
 
     print("Send: " + Linea)
     my_socket.send(bytes(Linea, 'utf-8') + b'\r\n')
+    #Escribimos loss datos que enviamoos en el Log
+    event = 'Send to'
+    Datos_Log (LOG, event, REGPROXY_IP, REGPROXY_PUERTO, Linea)
+    #DAtos recibidos
     data = my_socket.recv(1024)
     data_decod = data.decode('utf-8')
-    print('Recived -- ', data.decode('utf-8'))
+    print('\r\nRecived -- ', data.decode('utf-8'))
+    #Datos recibidos en el Log
+    evento = ' Recived from '
+    Datos_Log (LOG, evento, REGPROXY_IP, REGPROXY_PUERTO, data_decod)
 
-    Via = 'Via: SIP/2.0/UDP branch=z9hG4bKnashds7'       
-    lista = data_decod.split('\r\n' + Via + '\r\n')[0:-1]
+    #Me coge solo los los metodos trying ring y ok de todo lo que recibimos
+    lista = data_decod.split('\r\n')[1:4]
     No_Autorizada = data_decod.split('\r\n')[0]
-    Trying = 'SIP/2.0 100 Trying'
-    Ring = 'SIP/2.0 180 Ring'
-    OK = 'SIP/2.0 200 OK'
+    Trying = 'SIP/2.0 100 Trying '
+    Ring = 'SIP/2.0 180 Ring '
+    OK = 'SIP/2.0 200 OK '
+    Not_Found = 'SIP/2.0 404 User Not Found '
+    Bad_R = 'SIP/2.0 400 Bad Request '
+    
     if lista[0:3] == [Trying, Ring , OK]:
-        LINEACK = 'ACK' + ' sip:' + OPTION + 'SIP/2.0' + b'\r\n'
-        my_socket.send(bytes(LINEACK, 'utf-8') + b'\r\n')
+        LINEACK = 'ACK' + ' sip:' + OPTION + 'SIP/2.0' + '\r\n'
+        my_socket.send(bytes(LINEACK, 'utf-8'))
+        #Escribimos datos en el Log
+        event = 'Send to'
+        Datos_Log (LOG, event, REGPROXY_IP, REGPROXY_PUERTO, LINEACK)
+        
+        #RTP
+        Line_restante = data_decod.split('\r\n')[6]
+        IP_RECEPT = Line_restante.split(' ')[1]
+        Line_Port = data_decod.split('\r\n')[9]
+        PORT_RECEPT = Line_Port.split(' ')[1]
+        #aEjecutar = './mp32rtp -i ' + IP_RECEPT + ' -p' + RTPAUDIO
+        #aEjecutar += '<' + AUDIO
+        #os.system(aEjecutar)
+        #Escribimos el mensage de comienzo RTP en el log
+        Event = ' Comienzo el envío RTP '
+        Datos_Log(LOG, Event, IP_RECEPT, PORT_RECEPT, Line_Port)
+        # Escribimos el mensage de fin RTP en el log
+        Event = ' Terminando el envío RTP '
+        Datos_Log(LOG, Event, IP_RECEPT, PORT_RECEPT, '')
         data = my_socket.recv(1024)
     elif No_Autorizada == 'SIP/2.0 401 Unauthorized':
         aleatorio = hashlib.md5()
         Nonce_salto_linea = data_decod.split('nonce="')[1]
-        Nonce = Nonce_salto_linea = data_decod.split('"')[0]
+        Nonce = Nonce_salto_linea.split('"')[0]
         aleatorio.update(bytes(PASSWORD + Nonce, 'utf-8'))
         RESPONSE = aleatorio.hexdigest()
         LINE_REGIST = Linea_sip + USUARIO + ":" + UASERVER_PUERTO
         LINE_REGIST += " SIP/2.0\r\n" + "Expires: " + OPTION + "\r\n"
         LINE_REGIST += 'Authorization: Digest response="' + RESPONSE
         LINE_REGIST += '"\r\n'
-        
-        my_socket.send(bytes(LINE_REGIST, 'utf-8') + b'\r\n')
-        data = my_socket.recv(1024)
-
+        try:
+            my_socket.send(bytes(LINE_REGIST, 'utf-8') + b'\r\n')
+        except error.socket:
+            Evento = 'Error'
+            Datos_Log(LOG, Evento, IP_PROXY, PORT_PROXY, '')
+            sys.exit("Error: No server listening")
+            # Escribimos en el log los datos que enviamos
+            Evento = ' Send to '
+            Datos_Log(LOG, Evento, IP_PROXY, PORT_PROXY, LINE_REGIST)
+            data = my_socket.recv(1024)
+            data_decod = data.decode('utf-8')
+            print("Recibimos\r\n" + data_decod)
+            # Escribimos el mensaje en el archivo de log el mensaje recibido
+            Evento = ' Received from '
+            Datos_Log(LOG, Evento, IP_PROXY, PORT_PROXY, data_decod)
+    elif lista == ['Acceso denegado: password is incorrect']:
+        print("Usage: The Password is incorrect")
+    elif lista == ['Expires no es un entero']:
+        print("Usage: Expires no es un entero")
+    elif lista != OK and lista != Bad_R and lista != Not_Found:
+        # Escribimos en el log el mensaje de error
+        Evento = 'Error: Method incorrect'
+        Datos_Log(LOG, Evento, '', '', '')
 
     """Cerramos todo."""
     print("finish socket...")
-    my_socket.close()
+    Event = ' Finishing.'
     print("Fin.")
+    my_socket.close()
     
        
